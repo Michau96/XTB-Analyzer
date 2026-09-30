@@ -6,7 +6,6 @@ import {
   generateCumulativePnLTimeline,
 } from '../lib/analytics/metrics';
 import {
-  SAMPLE_ACCOUNT_NUMBER,
   SAMPLE_CASH_OPERATIONS,
   SAMPLE_OPEN_POSITIONS,
   SAMPLE_TRADES,
@@ -24,20 +23,11 @@ import {
   XtbTrade,
 } from '../types/portfolio';
 
-export interface PortfolioMeta {
-  id: string;
-  name: string;
-  accountNumber?: string;
-  currency: string;
-}
-
 interface PortfolioContextType {
-  portfolios: PortfolioMeta[];
-  activePortfolioId: string;
-  setActivePortfolioId: (id: string) => void;
-  createPortfolio: (name: string, currency?: string) => void;
+  accountNumbers: string[];
+  accountFilter: string; // 'ALL' or specific account number
+  setAccountFilter: (acc: string) => void;
 
-  accountNumber: string;
   trades: XtbTrade[];
   cashOperations: XtbCashOperation[];
   openPositions: XtbOpenPosition[];
@@ -80,31 +70,47 @@ interface PortfolioContextType {
 
 const PortfolioContext = createContext<PortfolioContextType | undefined>(undefined);
 
-const TRADES_STORAGE_PREFIX = 'xtb_trades_';
-const CASH_STORAGE_PREFIX = 'xtb_cash_';
-const OPEN_STORAGE_PREFIX = 'xtb_open_';
-const PORTFOLIOS_KEY = 'xtb_portfolios_list_v1';
+const TRADES_STORAGE_KEY = 'xtb_unified_trades_v2';
+const CASH_STORAGE_KEY = 'xtb_unified_cash_v2';
+const OPEN_STORAGE_KEY = 'xtb_unified_open_v2';
+const ACCOUNTS_STORAGE_KEY = 'xtb_unified_accounts_v2';
 const THEME_KEY = 'xtb_theme_mode';
 const PRIVACY_KEY = 'xtb_privacy_mode';
 
 export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [portfolios, setPortfolios] = useState<PortfolioMeta[]>(() => {
+  const [accountNumbers, setAccountNumbers] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem(PORTFOLIOS_KEY);
+      const saved = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
       if (saved) return JSON.parse(saved);
     } catch {}
-    return [
-      { id: 'p_main', name: 'Główne konto XTB (PLN)', accountNumber: SAMPLE_ACCOUNT_NUMBER, currency: 'PLN' },
-      { id: 'p_ike', name: 'Konto Emerytalne IKE', accountNumber: '51863390', currency: 'PLN' },
-    ];
+    return ['51499252', '51863390'];
   });
 
-  const [activePortfolioId, setActivePortfolioId] = useState<string>('p_main');
-  const [accountNumber, setAccountNumber] = useState<string>(SAMPLE_ACCOUNT_NUMBER);
+  const [accountFilter, setAccountFilter] = useState<string>('ALL');
 
-  const [trades, setTrades] = useState<XtbTrade[]>([]);
-  const [cashOperations, setCashOperations] = useState<XtbCashOperation[]>([]);
-  const [openPositions, setOpenPositions] = useState<XtbOpenPosition[]>([]);
+  const [trades, setTrades] = useState<XtbTrade[]>(() => {
+    try {
+      const saved = localStorage.getItem(TRADES_STORAGE_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return SAMPLE_TRADES;
+  });
+
+  const [cashOperations, setCashOperations] = useState<XtbCashOperation[]>(() => {
+    try {
+      const saved = localStorage.getItem(CASH_STORAGE_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return SAMPLE_CASH_OPERATIONS;
+  });
+
+  const [openPositions, setOpenPositions] = useState<XtbOpenPosition[]>(() => {
+    try {
+      const saved = localStorage.getItem(OPEN_STORAGE_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return SAMPLE_OPEN_POSITIONS;
+  });
 
   const [dateFilter, setDateFilter] = useState<DateFilterRange>('ALL');
   const [customStartDate, setCustomStartDate] = useState<string>('');
@@ -117,12 +123,12 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const saved = localStorage.getItem(THEME_KEY);
-    return saved === 'light' ? 'light' : 'dark';
+    return saved === 'dark' ? 'dark' : 'light';
   });
 
   const [importResult, setImportResult] = useState<ParseResult | null>(null);
 
-  // Sync theme to document
+  // Sync theme
   useEffect(() => {
     const root = document.documentElement;
     if (theme === 'dark') {
@@ -135,48 +141,17 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
-  // Load portfolio data when activePortfolioId changes
+  // Persist data in localStorage
   useEffect(() => {
     try {
-      const tKey = `${TRADES_STORAGE_PREFIX}${activePortfolioId}`;
-      const cKey = `${CASH_STORAGE_PREFIX}${activePortfolioId}`;
-      const oKey = `${OPEN_STORAGE_PREFIX}${activePortfolioId}`;
-
-      const savedTrades = localStorage.getItem(tKey);
-      const savedCash = localStorage.getItem(cKey);
-      const savedOpen = localStorage.getItem(oKey);
-
-      if (savedTrades && savedCash) {
-        setTrades(JSON.parse(savedTrades));
-        setCashOperations(JSON.parse(savedCash));
-        setOpenPositions(savedOpen ? JSON.parse(savedOpen) : []);
-      } else if (activePortfolioId === 'p_main') {
-        // Load initial sample data for default portfolio
-        setTrades(SAMPLE_TRADES);
-        setCashOperations(SAMPLE_CASH_OPERATIONS);
-        setOpenPositions(SAMPLE_OPEN_POSITIONS);
-        setAccountNumber(SAMPLE_ACCOUNT_NUMBER);
-      } else {
-        setTrades([]);
-        setCashOperations([]);
-        setOpenPositions([]);
-      }
+      localStorage.setItem(TRADES_STORAGE_KEY, JSON.stringify(trades));
+      localStorage.setItem(CASH_STORAGE_KEY, JSON.stringify(cashOperations));
+      localStorage.setItem(OPEN_STORAGE_KEY, JSON.stringify(openPositions));
+      localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accountNumbers));
     } catch (e) {
-      console.error('Error loading portfolio from storage', e);
+      console.error('Error saving unified portfolio', e);
     }
-  }, [activePortfolioId]);
-
-  // Save changes to active portfolio in localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem(`${TRADES_STORAGE_PREFIX}${activePortfolioId}`, JSON.stringify(trades));
-      localStorage.setItem(`${CASH_STORAGE_PREFIX}${activePortfolioId}`, JSON.stringify(cashOperations));
-      localStorage.setItem(`${OPEN_STORAGE_PREFIX}${activePortfolioId}`, JSON.stringify(openPositions));
-      localStorage.setItem(PORTFOLIOS_KEY, JSON.stringify(portfolios));
-    } catch (e) {
-      console.error('Error saving portfolio data', e);
-    }
-  }, [trades, cashOperations, openPositions, activePortfolioId, portfolios]);
+  }, [trades, cashOperations, openPositions, accountNumbers]);
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
@@ -190,20 +165,14 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
   };
 
-  const createPortfolio = (name: string, currency: string = 'PLN') => {
-    const newId = `p_${Date.now()}`;
-    const newPort: PortfolioMeta = { id: newId, name, currency };
-    setPortfolios((prev) => [...prev, newPort]);
-    setActivePortfolioId(newId);
-  };
-
   const addParsedData = (res: ParseResult, replace: boolean = false) => {
     if (replace) {
       setTrades(res.trades);
       setCashOperations(res.cashOperations);
       setOpenPositions(res.openPositions || []);
+      setAccountNumbers(res.accountNumbers);
     } else {
-      // Merge unique
+      // Unified merge across all files/accounts
       const tradeMap = new Map<string, XtbTrade>();
       trades.forEach((t) => tradeMap.set(t.id, t));
       res.trades.forEach((t) => tradeMap.set(t.id, t));
@@ -212,18 +181,27 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       cashOperations.forEach((o) => opMap.set(o.id, o));
       res.cashOperations.forEach((o) => opMap.set(o.id, o));
 
-      setTrades(Array.from(tradeMap.values()).sort((a, b) => new Date(b.closeTime).getTime() - new Date(a.closeTime).getTime()));
-      setCashOperations(Array.from(opMap.values()).sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()));
-      if (res.openPositions && res.openPositions.length > 0) {
-        setOpenPositions(res.openPositions);
-      }
-    }
-
-    if (res.accountNumber) {
-      setAccountNumber(res.accountNumber);
-      setPortfolios((prev) =>
-        prev.map((p) => (p.id === activePortfolioId ? { ...p, accountNumber: res.accountNumber } : p))
+      setTrades(
+        Array.from(tradeMap.values()).sort(
+          (a, b) => new Date(b.closeTime).getTime() - new Date(a.closeTime).getTime()
+        )
       );
+      setCashOperations(
+        Array.from(opMap.values()).sort(
+          (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()
+        )
+      );
+
+      if (res.openPositions && res.openPositions.length > 0) {
+        const openMap = new Map<string, XtbOpenPosition>();
+        openPositions.forEach((o) => openMap.set(o.id, o));
+        res.openPositions.forEach((o) => openMap.set(o.id, o));
+        setOpenPositions(Array.from(openMap.values()));
+      }
+
+      // Merge account numbers
+      const mergedAccounts = Array.from(new Set([...accountNumbers, ...res.accountNumbers]));
+      setAccountNumbers(mergedAccounts);
     }
   };
 
@@ -231,16 +209,18 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setTrades(SAMPLE_TRADES);
     setCashOperations(SAMPLE_CASH_OPERATIONS);
     setOpenPositions(SAMPLE_OPEN_POSITIONS);
-    setAccountNumber(SAMPLE_ACCOUNT_NUMBER);
+    setAccountNumbers(['51499252', '51863390']);
   };
 
   const clearPortfolioData = () => {
     setTrades([]);
     setCashOperations([]);
     setOpenPositions([]);
-    localStorage.removeItem(`${TRADES_STORAGE_PREFIX}${activePortfolioId}`);
-    localStorage.removeItem(`${CASH_STORAGE_PREFIX}${activePortfolioId}`);
-    localStorage.removeItem(`${OPEN_STORAGE_PREFIX}${activePortfolioId}`);
+    setAccountNumbers([]);
+    localStorage.removeItem(TRADES_STORAGE_KEY);
+    localStorage.removeItem(CASH_STORAGE_KEY);
+    localStorage.removeItem(OPEN_STORAGE_KEY);
+    localStorage.removeItem(ACCOUNTS_STORAGE_KEY);
   };
 
   const deleteTrade = (id: string) => {
@@ -263,9 +243,14 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return `${formatted} ${curr}`;
   };
 
-  // Filtered trades by date and category
+  // Filtered trades by account, date, and category
   const filteredTrades = useMemo(() => {
     return trades.filter((t) => {
+      // Account filter
+      if (accountFilter !== 'ALL' && t.accountNumber && t.accountNumber !== accountFilter) {
+        return false;
+      }
+
       // Category filter
       if (categoryFilter !== 'ALL' && t.category !== categoryFilter) {
         return false;
@@ -277,18 +262,10 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const tradeDate = new Date(t.closeTime).getTime();
       const now = new Date().getTime();
 
-      if (dateFilter === '1M') {
-        return tradeDate >= now - 30 * 86400 * 1000;
-      }
-      if (dateFilter === '3M') {
-        return tradeDate >= now - 90 * 86400 * 1000;
-      }
-      if (dateFilter === '6M') {
-        return tradeDate >= now - 180 * 86400 * 1000;
-      }
-      if (dateFilter === '1Y') {
-        return tradeDate >= now - 365 * 86400 * 1000;
-      }
+      if (dateFilter === '1M') return tradeDate >= now - 30 * 86400 * 1000;
+      if (dateFilter === '3M') return tradeDate >= now - 90 * 86400 * 1000;
+      if (dateFilter === '6M') return tradeDate >= now - 180 * 86400 * 1000;
+      if (dateFilter === '1Y') return tradeDate >= now - 365 * 86400 * 1000;
       if (dateFilter === 'YTD') {
         const startOfYear = new Date(new Date().getFullYear(), 0, 1).getTime();
         return tradeDate >= startOfYear;
@@ -300,11 +277,16 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       return true;
     });
-  }, [trades, dateFilter, categoryFilter, customStartDate, customEndDate]);
+  }, [trades, accountFilter, dateFilter, categoryFilter, customStartDate, customEndDate]);
 
   // Filtered cash operations
   const filteredCashOperations = useMemo(() => {
     return cashOperations.filter((op) => {
+      // Account filter
+      if (accountFilter !== 'ALL' && op.accountNumber && op.accountNumber !== accountFilter) {
+        return false;
+      }
+
       if (dateFilter === 'ALL') return true;
 
       const opDate = new Date(op.time).getTime();
@@ -325,17 +307,27 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       return true;
     });
-  }, [cashOperations, dateFilter, customStartDate, customEndDate]);
+  }, [cashOperations, accountFilter, dateFilter, customStartDate, customEndDate]);
 
-  // Calculated Summary
+  // Filtered open positions
+  const filteredOpenPositions = useMemo(() => {
+    return openPositions.filter((p) => {
+      if (accountFilter !== 'ALL' && p.accountNumber && p.accountNumber !== accountFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [openPositions, accountFilter]);
+
+  // Summary
   const summary = useMemo(() => {
-    return calculatePortfolioSummary(filteredTrades, filteredCashOperations, openPositions);
-  }, [filteredTrades, filteredCashOperations, openPositions]);
+    return calculatePortfolioSummary(filteredTrades, filteredCashOperations, filteredOpenPositions);
+  }, [filteredTrades, filteredCashOperations, filteredOpenPositions]);
 
-  // Visualizations timelines
+  // Timelines
   const assetAllocation = useMemo(() => {
-    return generateAssetAllocationTimeline(filteredTrades, filteredCashOperations, openPositions);
-  }, [filteredTrades, filteredCashOperations, openPositions]);
+    return generateAssetAllocationTimeline(filteredTrades, filteredCashOperations, filteredOpenPositions);
+  }, [filteredTrades, filteredCashOperations, filteredOpenPositions]);
 
   const cumulativePnL = useMemo(() => {
     return generateCumulativePnLTimeline(filteredTrades, filteredCashOperations);
@@ -348,7 +340,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Export functions
   const exportPortfolioToJson = () => {
     const data = {
-      accountNumber,
+      accountNumbers,
       exportDate: new Date().toISOString(),
       trades,
       cashOperations,
@@ -358,7 +350,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `XTB_Portfolio_${accountNumber || 'export'}_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `XTB_Unified_Portfolio_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -366,6 +358,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const exportTradesToCsv = () => {
     const headers = [
       'ID',
+      'Numer Rachunku',
       'Instrument',
       'Ticker',
       'Kategoria',
@@ -382,6 +375,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     ];
     const rows = trades.map((t) => [
       t.id,
+      t.accountNumber || '',
       `"${t.instrument}"`,
       t.ticker,
       t.category,
@@ -402,7 +396,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `XTB_Transakcje_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `XTB_Wszystkie_Transakcje_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -410,11 +404,9 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   return (
     <PortfolioContext.Provider
       value={{
-        portfolios,
-        activePortfolioId,
-        setActivePortfolioId,
-        createPortfolio,
-        accountNumber,
+        accountNumbers,
+        accountFilter,
+        setAccountFilter,
         trades,
         cashOperations,
         openPositions,

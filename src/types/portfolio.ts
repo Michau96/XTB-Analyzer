@@ -14,6 +14,7 @@ export type CashOperationType =
 export interface XtbTrade {
   id: string; // Position ID or unique generated id
   positionId?: string;
+  accountNumber?: string;
   instrument: string;
   ticker: string;
   category: AssetCategory;
@@ -40,6 +41,7 @@ export interface XtbTrade {
 export interface XtbCashOperation {
   id: string;
   operationId?: string;
+  accountNumber?: string;
   time: string; // ISO string
   type: CashOperationType;
   typeRaw: string; // e.g. "Wpłata", "Dywidenda", "Podatek"
@@ -51,6 +53,7 @@ export interface XtbCashOperation {
 export interface XtbOpenPosition {
   id: string;
   positionId: string;
+  accountNumber?: string;
   instrument: string;
   ticker: string;
   category: AssetCategory;
@@ -66,7 +69,7 @@ export interface XtbOpenPosition {
 }
 
 export interface PortfolioSummary {
-  accountNumber?: string;
+  accountNumbers: string[];
   totalDeposit: number;
   totalWithdrawal: number;
   netDeposit: number;
@@ -118,11 +121,12 @@ export interface BenchmarkComparisonPoint {
 
 export interface ParseResult {
   success: boolean;
-  accountNumber?: string;
+  accountNumbers: string[];
   trades: XtbTrade[];
   cashOperations: XtbCashOperation[];
   openPositions: XtbOpenPosition[];
   warnings: string[];
+  filesProcessedCount: number;
   newTradesCount: number;
   duplicateTradesCount: number;
   newOperationsCount: number;

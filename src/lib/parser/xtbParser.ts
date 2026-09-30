@@ -1,24 +1,17 @@
 import * as XLSX from 'xlsx';
 import { AssetCategory, CashOperationType, ParseResult, TradeType, XtbCashOperation, XtbOpenPosition, XtbTrade } from '../../types/portfolio';
 
-/**
- * Normalizes number string from Polish/European format (e.g. "1 511,51", "28,655", "-604,93", 1511.51)
- */
 export function parseNumber(val: any): number {
   if (val === null || val === undefined || val === '') return 0;
   if (typeof val === 'number') return isNaN(val) ? 0 : val;
 
   let str = String(val).trim();
-  // Remove non-breaking spaces and regular spaces
   str = str.replace(/\s+/g, '').replace(/\u00A0/g, '');
   
-  // If format is like "1.234,56", replace '.' then ',' with '.'
   if (str.includes(',') && str.includes('.')) {
     if (str.indexOf('.') < str.indexOf(',')) {
-      // European 1.234,56
       str = str.replace(/\./g, '').replace(',', '.');
     } else {
-      // US with commas 1,234.56
       str = str.replace(/,/g, '');
     }
   } else if (str.includes(',')) {
@@ -29,21 +22,16 @@ export function parseNumber(val: any): number {
   return isNaN(num) ? 0 : num;
 }
 
-/**
- * Normalizes dates from various formats (e.g. "2025-02-03 14:34:38", "03.02.2025 14:34", Excel serial)
- */
 export function parseDate(val: any): string {
   if (!val) return new Date().toISOString();
   if (val instanceof Date) return val.toISOString();
 
-  // Excel serial number
   if (typeof val === 'number') {
     const d = new Date(Math.round((val - 25569) * 86400 * 1000));
     if (!isNaN(d.getTime())) return d.toISOString();
   }
 
   const str = String(val).trim();
-  // Format DD.MM.YYYY HH:mm:ss
   const ddmmyyyy = str.match(/^(\d{2})[./-](\d{2})[./-](\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
   if (ddmmyyyy) {
     const [, d, m, y, hh, mm, ss] = ddmmyyyy;
@@ -66,14 +54,11 @@ export function parseDate(val: any): string {
   return new Date().toISOString();
 }
 
-/**
- * Categorize asset
- */
 export function parseAssetCategory(categoryRaw: string, ticker: string): AssetCategory {
   const cat = (categoryRaw || '').toUpperCase();
   const tick = (ticker || '').toUpperCase();
 
-  if (cat.includes('ETF') || tick.endsWith('.DE') && (tick.startsWith('VWCE') || tick.startsWith('IUSN') || tick.startsWith('EUNL') || tick.startsWith('XEPS'))) {
+  if (cat.includes('ETF') || (tick.endsWith('.DE') && (tick.startsWith('VWCE') || tick.startsWith('IUSN') || tick.startsWith('EUNL') || tick.startsWith('XEPS') || tick.startsWith('VUAA')))) {
     return 'ETF';
   }
   if (cat.includes('CFD') || cat.includes('CRYPTO') || tick.includes('SOLANA') || tick.includes('BITCOIN') || tick.includes('ETH')) {
@@ -88,9 +73,6 @@ export function parseAssetCategory(categoryRaw: string, ticker: string): AssetCa
   return 'STOCK';
 }
 
-/**
- * Categorize cash operation
- */
 export function parseCashOpType(typeRaw: string, comment: string = ''): CashOperationType {
   const t = (typeRaw || '').toLowerCase();
   const c = (comment || '').toLowerCase();
@@ -121,15 +103,17 @@ export function parseCashOpType(typeRaw: string, comment: string = ''): CashOper
 }
 
 /**
- * Main parser function supporting ArrayBuffer (from File) or string (CSV)
+ * Parses single XTB file (ArrayBuffer or CSV string)
  */
-export function parseXtbFile(
-  fileContent: ArrayBuffer | string,
-  existingTrades: XtbTrade[] = [],
-  existingOperations: XtbCashOperation[] = []
-): ParseResult {
+export function parseSingleXtbFile(fileContent: ArrayBuffer | string): {
+  trades: XtbTrade[];
+  cashOperations: XtbCashOperation[];
+  openPositions: XtbOpenPosition[];
+  accountNumbers: string[];
+  warnings: string[];
+} {
   const warnings: string[] = [];
-  let accountNumber = '';
+  const accountNumbersSet = new Set<string>();
 
   let workbook: XLSX.WorkBook;
 
@@ -141,15 +125,11 @@ export function parseXtbFile(
     }
   } catch (err: any) {
     return {
-      success: false,
       trades: [],
       cashOperations: [],
       openPositions: [],
-      warnings: [`Błąd odczytu pliku: ${err.message || 'Niepoprawny format pliku XLSX/CSV'}`],
-      newTradesCount: 0,
-      duplicateTradesCount: 0,
-      newOperationsCount: 0,
-      duplicateOperationsCount: 0,
+      accountNumbers: [],
+      warnings: [`Błąd formatu pliku: ${err.message || 'Niepoprawny format XLSX/CSV'}`],
     };
   }
 
@@ -157,18 +137,17 @@ export function parseXtbFile(
   const parsedOperations: XtbCashOperation[] = [];
   const parsedOpenPositions: XtbOpenPosition[] = [];
 
-  // Iterate all sheets
+  let currentAccountNumber = '';
+
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
     if (!sheet) continue;
 
-    // Convert sheet to array of arrays
     const rawRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
     if (!rawRows || rawRows.length === 0) continue;
 
     const lowerSheetName = sheetName.toLowerCase();
     
-    // Check if sheet contains closed positions or cash operations
     let currentSection: 'NONE' | 'CLOSED' | 'CASH' | 'OPEN' = 'NONE';
     if (lowerSheetName.includes('zamknięte') || lowerSheetName.includes('closed')) {
       currentSection = 'CLOSED';
@@ -191,8 +170,9 @@ export function parseXtbFile(
       // Check account number metadata
       if (firstCellLower.includes('account number') || firstCellLower.includes('numer rachunku') || firstCellLower.includes('nr konta')) {
         const acc = String(row[1] || row[0]).replace(/[^\d]/g, '');
-        if (acc && !accountNumber) {
-          accountNumber = acc;
+        if (acc) {
+          currentAccountNumber = acc;
+          accountNumbersSet.add(acc);
         }
       }
 
@@ -244,7 +224,6 @@ export function parseXtbFile(
 
       if (!isHeaderFound) continue;
 
-      // Skip summary rows (e.g. "Profit/loss", "Podsumowanie", etc.)
       if (
         firstCellLower.includes('profit/loss') ||
         firstCellLower.includes('podsumowanie') ||
@@ -255,7 +234,6 @@ export function parseXtbFile(
         continue;
       }
 
-      // Helper function to get value by matching possible header names
       const getVal = (...keys: string[]) => {
         for (const k of keys) {
           for (const [header, idx] of Object.entries(headerIndices)) {
@@ -296,11 +274,9 @@ export function parseXtbFile(
         const openTime = parseDate(openTimeRaw);
         const closeTime = parseDate(closeTimeRaw);
 
-        // Duration in days
         const durationMs = new Date(closeTime).getTime() - new Date(openTime).getTime();
         const durationDays = Math.max(0, Math.round(durationMs / (1000 * 60 * 60 * 24)));
 
-        // Return %
         let returnPercent = 0;
         if (openPrice > 0 && closePrice > 0) {
           returnPercent = ((closePrice - openPrice) / openPrice) * 100;
@@ -311,12 +287,12 @@ export function parseXtbFile(
 
         const category = parseAssetCategory(categoryRaw, ticker);
         const type: TradeType = typeRaw.includes('SELL') ? 'SELL' : 'BUY';
-
-        const id = positionId || `${ticker}_${openTime}_${volume}_${profitNet}`;
+        const id = positionId || `${currentAccountNumber}_${ticker}_${openTime}_${volume}_${profitNet}`;
 
         parsedTrades.push({
           id,
           positionId: positionId || undefined,
+          accountNumber: currentAccountNumber || undefined,
           instrument,
           ticker: ticker || instrument,
           category,
@@ -353,11 +329,12 @@ export function parseXtbFile(
 
         const time = parseDate(timeRaw);
         const type = parseCashOpType(typeRaw, comment);
-        const id = operationId || `cash_${time}_${type}_${amount}`;
+        const id = operationId || `cash_${currentAccountNumber}_${time}_${type}_${amount}`;
 
         parsedOperations.push({
           id,
           operationId: operationId || undefined,
+          accountNumber: currentAccountNumber || undefined,
           time,
           type,
           typeRaw,
@@ -387,8 +364,9 @@ export function parseXtbFile(
         const returnPercent = purchaseValue > 0 ? (unrealizedProfit / purchaseValue) * 100 : 0;
 
         parsedOpenPositions.push({
-          id: positionId || `${ticker}_open_${openTime}`,
+          id: positionId || `${currentAccountNumber}_${ticker}_open_${openTime}`,
           positionId: positionId || `${ticker}_open`,
+          accountNumber: currentAccountNumber || undefined,
           instrument,
           ticker,
           category: parseAssetCategory(categoryRaw, ticker),
@@ -406,7 +384,40 @@ export function parseXtbFile(
     }
   }
 
-  // Deduplicate against existing data
+  return {
+    trades: parsedTrades,
+    cashOperations: parsedOperations,
+    openPositions: parsedOpenPositions,
+    accountNumbers: Array.from(accountNumbersSet),
+    warnings,
+  };
+}
+
+/**
+ * Parses multiple files simultaneously and merges them cleanly into one unified portfolio
+ */
+export function parseMultipleXtbFiles(
+  fileContents: (ArrayBuffer | string)[],
+  existingTrades: XtbTrade[] = [],
+  existingOperations: XtbCashOperation[] = []
+): ParseResult {
+  const allAccountNumbers = new Set<string>();
+  const allWarnings: string[] = [];
+
+  const rawParsedTrades: XtbTrade[] = [];
+  const rawParsedOps: XtbCashOperation[] = [];
+  const rawParsedOpen: XtbOpenPosition[] = [];
+
+  for (const content of fileContents) {
+    const res = parseSingleXtbFile(content);
+    res.accountNumbers.forEach((acc) => allAccountNumbers.add(acc));
+    allWarnings.push(...res.warnings);
+    rawParsedTrades.push(...res.trades);
+    rawParsedOps.push(...res.cashOperations);
+    rawParsedOpen.push(...res.openPositions);
+  }
+
+  // Deduplicate against existing data and within newly parsed files
   const existingTradeMap = new Set(
     existingTrades.map((t) => t.positionId || `${t.ticker}_${t.openTime}_${t.profitNet}`)
   );
@@ -418,7 +429,7 @@ export function parseXtbFile(
   let duplicateTradesCount = 0;
   const mergedTrades = [...existingTrades];
 
-  for (const trade of parsedTrades) {
+  for (const trade of rawParsedTrades) {
     const key = trade.positionId || `${trade.ticker}_${trade.openTime}_${trade.profitNet}`;
     if (existingTradeMap.has(key)) {
       duplicateTradesCount++;
@@ -433,7 +444,7 @@ export function parseXtbFile(
   let duplicateOperationsCount = 0;
   const mergedOperations = [...existingOperations];
 
-  for (const op of parsedOperations) {
+  for (const op of rawParsedOps) {
     const key = op.operationId || `${op.time}_${op.type}_${op.amount}`;
     if (existingOpMap.has(key)) {
       duplicateOperationsCount++;
@@ -449,22 +460,31 @@ export function parseXtbFile(
   // Sort cash operations by time descending
   mergedOperations.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
 
-  if (parsedTrades.length === 0 && parsedOperations.length === 0) {
-    warnings.push(
-      'Nie znaleziono pozycji ani operacji gotówkowych. Upewnij się, że plik to raport wyeksportowany z XTB (np. zawiera zakładki "Pozycje zamknięte" lub "Operacje gotówkowe").'
+  if (rawParsedTrades.length === 0 && rawParsedOps.length === 0) {
+    allWarnings.push(
+      'Nie znaleziono pozycji ani operacji gotówkowych w załadowanych plikach.'
     );
   }
 
   return {
-    success: parsedTrades.length > 0 || parsedOperations.length > 0,
-    accountNumber: accountNumber || undefined,
+    success: mergedTrades.length > 0 || mergedOperations.length > 0,
+    accountNumbers: Array.from(allAccountNumbers),
     trades: mergedTrades,
     cashOperations: mergedOperations,
-    openPositions: parsedOpenPositions,
-    warnings,
+    openPositions: rawParsedOpen,
+    warnings: Array.from(new Set(allWarnings)),
+    filesProcessedCount: fileContents.length,
     newTradesCount,
     duplicateTradesCount,
     newOperationsCount,
     duplicateOperationsCount,
   };
+}
+
+export function parseXtbFile(
+  fileContent: ArrayBuffer | string,
+  existingTrades: XtbTrade[] = [],
+  existingOperations: XtbCashOperation[] = []
+): ParseResult {
+  return parseMultipleXtbFiles([fileContent], existingTrades, existingOperations);
 }

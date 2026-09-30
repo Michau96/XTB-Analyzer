@@ -10,23 +10,22 @@ import {
   Legend,
 } from 'recharts';
 import { usePortfolio } from '../../context/PortfolioContext';
-import { Layers, PieChart as PieIcon, Info } from 'lucide-react';
+import { Layers } from 'lucide-react';
 
 export const AssetAllocationChart: React.FC = () => {
-  const { assetAllocation, formatMoney, privacyMode } = usePortfolio();
+  const { assetAllocation, formatMoney, privacyMode, theme } = usePortfolio();
   const [viewType, setViewType] = useState<'VALUES' | 'PERCENTAGE'>('VALUES');
 
   if (!assetAllocation || assetAllocation.length === 0) {
     return (
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col items-center justify-center min-h-[340px] text-center text-slate-400">
-        <Layers className="w-10 h-10 mb-3 text-slate-600 animate-pulse" />
-        <p className="font-medium text-slate-300">Brak danych do wygenerowania struktury portfela</p>
+      <div className="card-theme p-6 rounded-2xl flex flex-col items-center justify-center min-h-[340px] text-center text-slate-400">
+        <Layers className="w-10 h-10 mb-3 text-slate-400 dark:text-slate-600 animate-pulse" />
+        <p className="font-semibold text-slate-700 dark:text-slate-300">Brak danych do wygenerowania struktury portfela</p>
         <p className="text-xs text-slate-500 mt-1">Wgraj raport XLSX z XTB, aby zobaczyć alokację aktywów w czasie.</p>
       </div>
     );
   }
 
-  // Format data for percentage view if selected
   const chartData = assetAllocation.map((item) => {
     if (viewType === 'PERCENTAGE' && item.total > 0) {
       return {
@@ -53,22 +52,22 @@ export const AssetAllocationChart: React.FC = () => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/80 p-3.5 rounded-xl shadow-2xl text-xs space-y-2 min-w-[200px]">
-          <div className="font-semibold text-slate-200 border-b border-slate-800 pb-1.5 flex justify-between items-center">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3.5 rounded-xl shadow-xl text-xs space-y-2 min-w-[200px]">
+          <div className="font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-1.5 flex justify-between items-center">
             <span>{label}</span>
-            <span className="text-emerald-400 font-mono font-bold">
+            <span className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">
               {formatMoney(data.total)}
             </span>
           </div>
           <div className="space-y-1 font-mono">
-            <div className="flex items-center justify-between text-indigo-300">
+            <div className="flex items-center justify-between text-indigo-700 dark:text-indigo-300">
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-sm bg-indigo-500"></span>
                 Akcje (Stocks)
               </span>
               <span>{formatMoney(data.stocks)}</span>
             </div>
-            <div className="flex items-center justify-between text-emerald-300">
+            <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-300">
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span>
                 ETF-y
@@ -76,7 +75,7 @@ export const AssetAllocationChart: React.FC = () => {
               <span>{formatMoney(data.etfs)}</span>
             </div>
             {data.cfdCrypto > 0 && (
-              <div className="flex items-center justify-between text-amber-300">
+              <div className="flex items-center justify-between text-amber-700 dark:text-amber-300">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-sm bg-amber-500"></span>
                   CFD / Krypto
@@ -84,7 +83,7 @@ export const AssetAllocationChart: React.FC = () => {
                 <span>{formatMoney(data.cfdCrypto)}</span>
               </div>
             )}
-            <div className="flex items-center justify-between text-slate-400">
+            <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-sm bg-slate-500"></span>
                 Gotówka (Cash)
@@ -98,32 +97,36 @@ export const AssetAllocationChart: React.FC = () => {
     return null;
   };
 
+  const isDark = theme === 'dark';
+  const gridColor = isDark ? '#334155' : '#e2e8f0';
+  const axisColor = isDark ? '#64748b' : '#94a3b8';
+
   return (
-    <div className="glass-panel p-5 sm:p-6 rounded-2xl border border-slate-800 shadow-xl flex flex-col justify-between">
+    <div className="card-theme p-5 sm:p-6 rounded-2xl flex flex-col justify-between">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-              <Layers className="w-5 h-5 text-emerald-400" />
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Layers className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
               Struktura Portfela w Czasie
             </h3>
-            <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 font-medium">
+            <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-medium border border-slate-200 dark:border-slate-700">
               Historical Allocation
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Skumulowany wykres alokacji kapitału między akcje, fundusze ETF, instrumenty CFD i gotówkę.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Skumulowany wykres alokacji kapitału między akcje, ETF-y, CFD i gotówkę.
           </p>
         </div>
 
         {/* Przełącznik Wartości / Procenty */}
-        <div className="flex items-center bg-slate-900/80 p-1 rounded-xl border border-slate-800 self-start sm:self-auto">
+        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 self-start sm:self-auto">
           <button
             onClick={() => setViewType('VALUES')}
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
               viewType === 'VALUES'
-                ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             Wartość (PLN)
@@ -132,8 +135,8 @@ export const AssetAllocationChart: React.FC = () => {
             onClick={() => setViewType('PERCENTAGE')}
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
               viewType === 'PERCENTAGE'
-                ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             Udział (%)
@@ -162,16 +165,16 @@ export const AssetAllocationChart: React.FC = () => {
                 <stop offset="95%" stopColor="#64748b" stopOpacity={0.05} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke={gridColor} opacity={0.6} vertical={false} />
             <XAxis
               dataKey="date"
               tickFormatter={formatDateTick}
-              stroke="#64748b"
+              stroke={axisColor}
               fontSize={11}
               tickLine={false}
             />
             <YAxis
-              stroke="#64748b"
+              stroke={axisColor}
               fontSize={11}
               tickLine={false}
               tickFormatter={(v) =>
@@ -194,7 +197,7 @@ export const AssetAllocationChart: React.FC = () => {
                   cfdCryptoPct: 'CFD %',
                   cashPct: 'Gotówka %',
                 };
-                return <span className="text-xs text-slate-300 font-medium">{map[value] || value}</span>;
+                return <span className="text-xs text-slate-700 dark:text-slate-300 font-medium">{map[value] || value}</span>;
               }}
             />
             {viewType === 'VALUES' ? (
@@ -203,7 +206,7 @@ export const AssetAllocationChart: React.FC = () => {
                   type="monotone"
                   dataKey="stocks"
                   stackId="1"
-                  stroke="#6366f1"
+                  stroke="#4f46e5"
                   strokeWidth={2}
                   fillOpacity={1}
                   fill="url(#colorStocks)"
@@ -212,7 +215,7 @@ export const AssetAllocationChart: React.FC = () => {
                   type="monotone"
                   dataKey="etfs"
                   stackId="1"
-                  stroke="#10b981"
+                  stroke="#059669"
                   strokeWidth={2}
                   fillOpacity={1}
                   fill="url(#colorEtfs)"
@@ -221,7 +224,7 @@ export const AssetAllocationChart: React.FC = () => {
                   type="monotone"
                   dataKey="cfdCrypto"
                   stackId="1"
-                  stroke="#f59e0b"
+                  stroke="#d97706"
                   strokeWidth={2}
                   fillOpacity={1}
                   fill="url(#colorCfd)"
@@ -242,21 +245,21 @@ export const AssetAllocationChart: React.FC = () => {
                   type="monotone"
                   dataKey="stocksPct"
                   stackId="1"
-                  stroke="#6366f1"
+                  stroke="#4f46e5"
                   fill="#6366f1"
                 />
                 <Area
                   type="monotone"
                   dataKey="etfsPct"
                   stackId="1"
-                  stroke="#10b981"
+                  stroke="#059669"
                   fill="#10b981"
                 />
                 <Area
                   type="monotone"
                   dataKey="cfdCryptoPct"
                   stackId="1"
-                  stroke="#f59e0b"
+                  stroke="#d97706"
                   fill="#f59e0b"
                 />
                 <Area

@@ -2,5 +2,7 @@
   "name": "XTB Portfolio Analyzer",
   "description": "Zaawansowana analityka i wizualizacja portfela inwestycyjnego z raportów XLSX z platformy XTB. Porównanie z benchmarkami (S&P 500, MSCI ACWI), alokacja aktywów, analiza zysków/strat i dywidend.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
